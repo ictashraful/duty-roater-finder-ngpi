@@ -4,6 +4,7 @@ from PIL import Image
 import os
 import base64
 import io
+import hmac
 from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -257,6 +258,105 @@ def generate_pdf(user_info, schedule_df):
     buffer.seek(0)
     return buffer.getvalue()
 
+# ৩.৬ কন্ট্রোল রুম ড্যাশবোর্ড — পাসওয়ার্ড সুরক্ষিত (এক অ্যাডমিন ইউজার)
+# ক্রেডেনশিয়াল এনভায়রনমেন্ট ভেরিয়েবল থেকে আসে; ডিফল্ট থাকলে অ্যাপে সতর্কবার্তা দেখায়।
+_DEFAULT_PASSWORD = "admin123"
+ADMIN_USER = os.environ.get("CONTROL_ROOM_USER", "admin")
+ADMIN_PASSWORD = os.environ.get("CONTROL_ROOM_PASSWORD", _DEFAULT_PASSWORD)
+
+
+def _check_admin_login():
+    """Render a login form; return True once the single admin user is authenticated."""
+    if st.session_state.get("cr_authenticated"):
+        return True
+
+    st.markdown("#### 🔒 Control Room Login")
+    st.caption("Restricted area — authorised personnel only.")
+    with st.form("control_room_login", clear_on_submit=False):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Log in")
+
+    if submitted:
+        # constant-time comparison to avoid leaking credential length/content via timing
+        ok_user = hmac.compare_digest(username.strip(), ADMIN_USER)
+        ok_pass = hmac.compare_digest(password, ADMIN_PASSWORD)
+        if ok_user and ok_pass:
+            st.session_state["cr_authenticated"] = True
+            st.rerun()
+        else:
+            st.error("❌ Invalid username or password.")
+    return False
+
+
+def render_control_room(df):
+    """Password-protected dashboard: filter the roster and list personnel on duty."""
+    st.markdown("## 🛡️ Control Room Dashboard")
+
+    if not _check_admin_login():
+        return
+
+    head = st.columns([3, 1])
+    head[0].success(f"Logged in as **{ADMIN_USER}**")
+    if head[1].button("🔓 Log out", use_container_width=True):
+        st.session_state["cr_authenticated"] = False
+        st.rerun()
+
+    if ADMIN_PASSWORD == _DEFAULT_PASSWORD:
+        st.warning(
+            "Using the default password. Set the `CONTROL_ROOM_PASSWORD` "
+            "environment variable to secure this dashboard.",
+            icon="⚠️",
+        )
+
+    st.markdown("Filter the duty roster below. **Leave a filter empty to include all values.**")
+
+    f1, f2, f3, f4 = st.columns(4)
+    with f1:
+        sel_dates = st.multiselect("📅 Date", sorted(df["Date"].unique()))
+    with f2:
+        sel_slots = st.multiselect("⏰ Time Slot", sorted(df["Time Slot"].unique()))
+    with f3:
+        sel_desigs = st.multiselect("🎓 Designation", sorted(df["Designation"].unique()))
+    with f4:
+        sel_cats = st.multiselect("🏷️ Category", sorted(df["Role"].unique()))
+
+    filtered = df
+    if sel_dates:
+        filtered = filtered[filtered["Date"].isin(sel_dates)]
+    if sel_slots:
+        filtered = filtered[filtered["Time Slot"].isin(sel_slots)]
+    if sel_desigs:
+        filtered = filtered[filtered["Designation"].isin(sel_desigs)]
+    if sel_cats:
+        filtered = filtered[filtered["Role"].isin(sel_cats)]
+
+    personnel = (
+        filtered[["Name", "Designation", "Role", "Technology/Dept", "Date", "Time Slot", "Duty Status"]]
+        .rename(columns={"Role": "Category", "Technology/Dept": "Dept/Tech"})
+        .sort_values(["Date", "Time Slot", "Name"])
+        .reset_index(drop=True)
+    )
+    personnel.index = personnel.index + 1
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Duty Assignments", len(personnel))
+    m2.metric("Unique Personnel", personnel["Name"].nunique())
+    m3.metric("Dates Covered", personnel["Date"].nunique())
+
+    st.markdown("#### 👥 Personnel on Duty")
+    if personnel.empty:
+        st.info("No personnel match the selected filters.")
+    else:
+        st.dataframe(personnel, use_container_width=True)
+        csv = personnel.to_csv(index_label="SL").encode("utf-8")
+        st.download_button(
+            "📥 Download Filtered List (CSV)",
+            data=csv,
+            file_name="control_room_personnel.csv",
+            mime="text/csv",
+        )
+
 # ৪. রস্টার ডেটা লোড
 try:
     df_portal = load_and_process_roster()
@@ -276,24 +376,40 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ৫.৫ নেভিগেশন — মূল পেজে ভিউ সুইচার (পাবলিক পোর্টাল বনাম কন্ট্রোল রুম)
+app_view = st.segmented_control(
+    "Navigation",
+    ["🏠 Personal Roster", "🛡️ Control Room"],
+    default="🏠 Personal Roster",
+    label_visibility="collapsed",
+)
+
+if app_view == "🛡️ Control Room":
+    render_control_room(df_portal)
+    st.stop()
+
 # ৬. ইন-পেজ ফিল্টার প্যানেল
 st.markdown("<div class='filter-section-title'>🎛️ নিচের অপশনগুলো থেকে আপনার নাম সিলেক্ট করুন:</div>", unsafe_allow_html=True)
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    selected_role = st.selectbox("১. পদবি/ক্যাটাগরি নির্ধারণ করুন:", sorted(df_portal['Role'].unique()), key="main_role")
+    selected_role = st.selectbox("১. পদবি/ক্যাটাগরি নির্ধারণ করুন:", sorted(df_portal['Role'].unique()), index=None, placeholder="— নির্বাচন করুন —", key="main_role")
 
-df_filtered_role = df_portal[df_portal['Role'] == selected_role]
+df_filtered_role = df_portal[df_portal['Role'] == selected_role] if selected_role else df_portal.iloc[0:0]
 
 with col2:
-    selected_tech = st.selectbox("২. টেকনোলজি/ডিপার্টমেন্ট নির্বাচন করুন:", sorted(df_filtered_role['Technology/Dept'].unique()), key="main_tech")
+    selected_tech = st.selectbox("২. টেকনোলজি/ডিপার্টমেন্ট নির্বাচন করুন:", sorted(df_filtered_role['Technology/Dept'].unique()), index=None, placeholder="— নির্বাচন করুন —", key="main_tech")
 
-df_filtered_tech = df_filtered_role[df_filtered_role['Technology/Dept'] == selected_tech]
+df_filtered_tech = df_filtered_role[df_filtered_role['Technology/Dept'] == selected_tech] if selected_tech else df_portal.iloc[0:0]
 
 with col3:
-    selected_name = st.selectbox("৩. তালিকায় আপনার নাম নির্বাচন করুন:", sorted(df_filtered_tech['Name'].unique()), key="main_name")
+    selected_name = st.selectbox("৩. তালিকায় আপনার নাম নির্বাচন করুন:", sorted(df_filtered_tech['Name'].unique()), index=None, placeholder="— নির্বাচন করুন —", key="main_name")
 
 # ৭. ডেটা ফিল্টার ও ভিউ জেনারেশন
+if not (selected_role and selected_tech and selected_name):
+    st.info("👆 আপনার ডিউটি রোস্টার দেখতে উপরের তিনটি অপশন (পদবি, টেকনোলজি/ডিপার্টমেন্ট ও নাম) নির্বাচন করুন।")
+    st.stop()
+
 user_schedule = df_filtered_tech[df_filtered_tech['Name'] == selected_name][['Date', 'Time Slot', 'Duty Status']]
 user_info = df_filtered_tech[df_filtered_tech['Name'] == selected_name].iloc[0]
 
