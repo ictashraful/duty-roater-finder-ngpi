@@ -319,80 +319,15 @@ if not user_schedule.empty:
     # স্ক্রিনে মেইন ইন্টারেক্টিভ টেবিল প্রদর্শন
     st.dataframe(user_schedule, use_container_width=True)
     
-    # 🔥 ৮. পিওর পিডিএফ ফাইল জেনারেশন ইঞ্জিন (HTML টু ডাউনলোড মেকানিজম)
-    # এটি কোনো জাভাস্ক্রিপ্ট রান করবে না, সরাসরি ব্রাউজারকে ফাইল ডাউনলোডের সিগন্যাল পাঠাবে।
-    
-    table_rows = ""
-    for idx, row in user_schedule.iterrows():
-        table_rows += f"""
-        <tr>
-            <td style='border: 1px solid #cbd5e1; padding: 10px; text-align: center;'>{idx}</td>
-            <td style='border: 1px solid #cbd5e1; padding: 10px; text-align: center;'>{row['Date']}</td>
-            <td style='border: 1px solid #cbd5e1; padding: 10px; text-align: center;'>{row['Time Slot']}</td>
-            <td style='border: 1px solid #cbd5e1; padding: 10px; text-align: center;'>{row['Duty Status']}</td>
-        </tr>
-        """
-        
-    # সম্পূর্ণ ডিরেক্ট প্রিন্ট-টু-পিডিএফ টেমপ্লেট
-    html_pdf_template = f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: 'Arial', sans-serif; padding: 20px; color: #0f172a; }}
-            .h-title {{ text-align: center; color: #1e3a8a; margin: 0; font-size: 22px; font-weight: bold; }}
-            .h-sub {{ text-align: center; color: #475569; margin: 5px 0 25px 0; font-size: 14px; }}
-            .p-box {{ border: 1px solid #cbd5e1; background: #f8fafc; padding: 15px; margin-bottom: 20px; border-radius: 6px; }}
-            .p-grid {{ display: table; width: 100%; }}
-            .p-row {{ display: table-row; }}
-            .p-cell {{ display: table-cell; padding: 5px 10px; font-size: 14px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
-            th {{ background-color: #1e3a8a; color: white; border: 1px solid #1e3a8a; padding: 12px; font-size: 14px; }}
-        </style>
-    </head>
-    <body>
-        <div class='h-title'>Narsingdi Government Polytechnic Institute</div>
-        <div class='h-sub'>Mid-Term Examination - 2026 | Personalized Duty Roster</div>
-        
-        <div class='p-box'>
-            <div class='p-grid'>
-                <div class='p-row'>
-                    <div class='p-cell'><strong>Name:</strong> {user_info['Name']}</div>
-                    <div class='p-cell'><strong>Dept/Tech:</strong> {user_info['Technology/Dept']}</div>
-                </div>
-                <div class='p-row'>
-                    <div class='p-cell'><strong>Designation:</strong> {user_info['Designation']}</div>
-                    <div class='p-cell'><strong>Category:</strong> {user_info['Role']}</div>
-                </div>
-            </div>
-        </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>SL</th>
-                    <th>Date</th>
-                    <th>Time Slot</th>
-                    <th>Duty Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {table_rows}
-            </tbody>
-        </table>
-    </body>
-    </html>
-    """
-    
-    # ফাইলটির নাম সুন্দর করা হচ্ছে
-    pdf_filename = f"Duty_Roster_{user_info['Name'].replace(' ', '_')}.pdf"
-    
-    # 🎯 শতভাগ সুরক্ষিত এবং গ্যারান্টিযুক্ত ডাউনলোড বাটন (Native Application/PDF Stream)
+    # ৮. বৈধ পিডিএফ জেনারেশন (ReportLab) ও ডাউনলোড বাটন
+    pdf_bytes = generate_pdf(user_info, user_schedule)
+    pdf_filename = f"Duty_Roster_{str(user_info['Name']).replace(' ', '_')}.pdf"
+
     st.download_button(
         label="📥 Download PDF Document",
-        data=html_pdf_template,
+        data=pdf_bytes,
         file_name=pdf_filename,
-        mime="application/pdf"
+        mime="application/pdf",
     )
 else:
     st.success("🎉 No exam duty assigned to your profile in this roster.")
