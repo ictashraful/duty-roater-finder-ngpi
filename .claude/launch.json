@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "duty-roster",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["run", "--rm", "--name", "duty-roster", "-p", "8501:8501", "duty-roster-app"],
+      "port": 8501
+    }
+  ]
+}
