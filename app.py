@@ -780,13 +780,14 @@ except Exception as e:
     st.error(f"এক্সেল ফাইলটি লোড করা যাচ্ছে না। ত্রুটি: {e}")
     st.stop()
 
-# ৫. পোর্টাল টপ ব্যানার রেন্ডারিংlogo_element = f"<img src='{logo_b64}' class='header-img-render'>" if logo_b64 else "<div class='fallback-logo-render'>📝</div>"
+# ৫. পোর্টাল টপ ব্যানার রেন্ডারিং
+logo_element = f"<img src='{logo_b64}' class='header-img-render'>" if logo_b64 else "<div class='fallback-logo-render'>📝</div>"
 st.markdown(f"""
 <div class='portal-header-container'>
     {logo_element}
     <div class='header-text'>
         <h1>নরসিংদী সরকারি পলিটেকনিক ইনস্টিটিউট</h1>
-        <p>পর্বমধ্য পরীক্ষা - ২০২৬ | ডিজিটাল ডিউটি রোস্টার ম্যানেজমেন্ট পোর্টাল</p>
+        <p>পর্বমধ্য পরীক্ষা - ২০২৬ | ডিজিটাল ডিউটি রোস্টার পোর্টাল</p>
     </div>
 </div>
 """, unsafe_allow_html=True)
