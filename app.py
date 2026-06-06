@@ -11,7 +11,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 # ১. পেজ কনফিগারেশন সেটআপ
@@ -280,6 +280,22 @@ def generate_pdf(user_info, schedule_df):
         ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
     ]))
     elements.append(table)
+
+    # --- কাস্টম সিগনেচার ব্লক (স্বাক্ষরের জন্য পর্যাপ্ত স্পেস বৃদ্ধি করা হলো) ---
+    sig_style = ParagraphStyle(
+        "SigBlock",
+        parent=styles["Normal"],
+        alignment=TA_RIGHT,
+        leading=16,
+        spaceBefore=70  # অফিসার যেন আরামে কলম দিয়ে স্বাক্ষর করতে পারেন সেজন্য মার্জিন বাড়িয়ে ৭০ করা হলো
+    )
+    
+    sig_text = (
+        "<b><font size=11>Exam Control Room Officer</font></b><br/>"
+        "<font size=9 color='#475569'>Narsingdi Government Polytechnic Institute</font>"
+    )
+    elements.append(Paragraph(sig_text, sig_style))
+    # -------------------------------------------------------------------------
 
     doc.build(elements)
     buffer.seek(0)
@@ -656,24 +672,13 @@ def render_control_room(df):
             elif "MLSS" in sel_cats[0] or "Hall Super" in sel_cats[0]:
                 dynamic_assignment_label = "Floor No"
 
-        # কলাম হেডার পরিবর্তন (HTML কোড বিন্যাস ট্রিকস অনুযায়ী)
-        headers = ["SL", "Name\n(Not in Order of Seniority)", "Designation", "Dept/Tech", dynamic_assignment_label, "Signature"]
-        
-        # ২ লাইনের টেক্সট সুন্দরভাবে দেখানোর জন্য হেডার রো-এর উচ্চতা বৃদ্ধি করা হলো
-        ws.row_dimensions[6].height = 35 
-
+        headers = ["SL", "Name", "Designation", "Dept/Tech", dynamic_assignment_label, "Signature"]
         for col_num, header_title in enumerate(headers, 1):
             cell = ws.cell(row=6, column=col_num)
             cell.value = header_title
+            cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
-            
-            # 'Name' হেডারটিকে সুনির্দিষ্টভাবে রেন্ডার, টেক্সট র‍্যাপ এবং মাঝখানে সারিবদ্ধ করা হচ্ছে
-            if col_num == 2:
-                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            else:
-                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
             
         # ৪. ডেটা পপুলেশন (Row 7 থেকে শুরু)
         thin_border = Border(
@@ -784,12 +789,12 @@ df_filtered_tech = df_filtered_role[df_filtered_role['Technology/Dept'] == selec
 with col3:
     selected_name = st.selectbox("৩. তালিকায় আপনার নাম নির্বাচন করুন:", sorted(df_filtered_tech['Name'].unique()), index=None, placeholder="— নির্বাচন করুন —", key="main_name")
 
-# ७. ডেটা ফিল্টার ও ভিউ জেনারেশন
+# ৭. ডেটা ফিল্টার ও ভিউ জেনারেশন
 if not (selected_role and selected_tech and selected_name):
     st.info("👆 আপনার ডিউটি রোস্টার দেখতে উপরের তিনটি অপশন (পদবি, টেকনোলজি/ডিপার্টমেন্ট ও নাম) নির্বাচন করুন।")
     st.stop()
 
-# ইউজার ইন্টারফেসেও এসাইনমেন্ট সিঙ্ক করা এবং ক্লিনিং নিশ্চিত করা
+# ইউজার ইন্টারফেসেও এসাইনমেন্ট সিঙ্ক করা এবং充ীনিং নিশ্চিত করা
 df_mapped = df_filtered_tech.copy()
 assigned_column_user = []
 for _, row in df_mapped.iterrows():
@@ -806,7 +811,7 @@ df_mapped["Floor / Room Assignment"] = assigned_column_user
 user_schedule = df_mapped[df_mapped['Name'] == selected_name][['Date', 'Time Slot', 'Duty Status', 'Floor / Room Assignment']]
 user_info = df_mapped[df_mapped['Name'] == selected_name].iloc[0]
 
-# প্রোফাইলカード প্রদর্শন
+# প্রোফাইল কার্ড প্রদর্শন
 st.markdown(f"""
 <div class='profile-card'>
     <div class='profile-grid'>
