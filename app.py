@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 from PIL import Image
 import os
@@ -6,6 +6,7 @@ import base64
 import io
 import hmac
 import random
+import json
 from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -22,15 +23,64 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+
+# Persistent storage configuration
+CONFIG_DIR = ".config"
+ROOMS_FILE = os.path.join(CONFIG_DIR, "custom_rooms.json")
+FLOORS_FILE = os.path.join(CONFIG_DIR, "custom_floors.json")
+
+def ensure_config_dir():
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
+
+def load_custom_rooms():
+    ensure_config_dir()
+    default_rooms = [f"Room {i}" for i in range(101, 110)]
+    try:
+        if os.path.exists(ROOMS_FILE):
+            with open(ROOMS_FILE, 'r', encoding='utf-8') as f:
+                rooms = json.load(f)
+                return rooms if rooms else default_rooms
+    except Exception as e:
+        print(f"Could not load rooms configuration: {e}")
+    return default_rooms
+
+def load_custom_floors():
+    ensure_config_dir()
+    default_floors = ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor"]
+    try:
+        if os.path.exists(FLOORS_FILE):
+            with open(FLOORS_FILE, 'r', encoding='utf-8') as f:
+                floors = json.load(f)
+                return floors if floors else default_floors
+    except Exception as e:
+        print(f"Could not load floors configuration: {e}")
+    return default_floors
+
+def save_custom_rooms(rooms):
+    ensure_config_dir()
+    try:
+        with open(ROOMS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(rooms, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Could not save rooms configuration: {e}")
+
+def save_custom_floors(floors):
+    ensure_config_dir()
+    try:
+        with open(FLOORS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(floors, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Could not save floors configuration: {e}")
 # সেশন স্টেট ইনিশিয়ালাইজেশন
 if "assignments" not in st.session_state:
     st.session_state["assignments"] = {}
 
 if "custom_rooms" not in st.session_state:
-    st.session_state["custom_rooms"] = [f"Room {i}" for i in range(101, 110)]  # ডিফল্ট ৯টি রুম
+    st.session_state["custom_rooms"] = load_custom_rooms()
 
 if "custom_floors" not in st.session_state:
-    st.session_state["custom_floors"] = ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor"]  # ডিফল্ট ৫টি ফ্লোর
+    st.session_state["custom_floors"] = load_custom_floors()
 
 # লোগো ফাইল অটো-চেক করার ফাংশন
 def get_logo_base64():
@@ -434,6 +484,7 @@ def render_control_room(df):
                         if r_clean not in st.session_state["custom_rooms"]:
                             st.session_state["custom_rooms"].append(r_clean)
                             st.session_state["custom_rooms"].sort()
+                            save_custom_rooms(st.session_state["custom_rooms"])
                             st.rerun()
             
             # রুমের নাম পরিবর্তন (Rename Section)
@@ -453,6 +504,7 @@ def render_control_room(df):
                             idx = st.session_state["custom_rooms"].index(target_room)
                             st.session_state["custom_rooms"][idx] = r_new_clean
                             st.session_state["custom_rooms"].sort()
+                            save_custom_rooms(st.session_state["custom_rooms"])
                             st.rerun()
 
             # রুম ডিলিট করার ডেডিকেটেড অপশন (Delete Section)
@@ -464,6 +516,7 @@ def render_control_room(df):
                     with r_del_col2:
                         if st.button("Delete", key="btn_delete_room", use_container_width=True):
                             st.session_state["custom_rooms"].remove(delete_target_room)
+                            save_custom_rooms(st.session_state["custom_rooms"])
                             st.rerun()
 
             st.markdown("**Active Rooms (Check to activate):**")
@@ -496,6 +549,7 @@ def render_control_room(df):
                         f_clean = new_floor_input.strip()
                         if f_clean not in st.session_state["custom_floors"]:
                             st.session_state["custom_floors"].append(f_clean)
+                            save_custom_floors(st.session_state["custom_floors"])
                             st.rerun()
             
             # ফ্লোরের নাম পরিবর্তন (Rename Section)
@@ -511,6 +565,7 @@ def render_control_room(df):
                             f_new_clean = renamed_floor.strip()
                             idx = st.session_state["custom_floors"].index(target_floor)
                             st.session_state["custom_floors"][idx] = f_new_clean
+                            save_custom_floors(st.session_state["custom_floors"])
                             st.rerun()
 
             # ফ্লোর ডিলিট করার ডেডিকেটেড অপশন (Delete Section)
@@ -522,6 +577,7 @@ def render_control_room(df):
                     with f_del_col2:
                         if st.button("Delete", key="btn_delete_floor", use_container_width=True):
                             st.session_state["custom_floors"].remove(delete_target_floor)
+                            save_custom_floors(st.session_state["custom_floors"])
                             st.rerun()
 
             st.markdown("**Active Floors (Check to activate):**")
@@ -814,3 +870,4 @@ if not user_schedule.empty:
     )
 else:
     st.success("🎉 No exam duty assigned to your profile in this roster.")
+
