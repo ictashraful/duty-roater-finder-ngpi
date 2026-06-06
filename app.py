@@ -728,18 +728,16 @@ except Exception as e:
     st.stop()
 
 # ৫. পোর্টাল টপ ব্যানার রেন্ডারিং
-# Language selector buttons
-col1, col2, col3 = st.columns([3, 1, 1])
-with col2:
+# Language selector buttons - compact
+col_en, col_bn = st.columns(2, gap="small")
+with col_en:
     if st.button("🇬🇧 EN", use_container_width=True, key="btn_en"):
         st.session_state["language"] = "en"
         st.rerun()
-with col3:
+with col_bn:
     if st.button("🇧🇩 BN", use_container_width=True, key="btn_bn"):
         st.session_state["language"] = "bn"
         st.rerun()
-
-st.divider()
 
 logo_element = f"<img src='{logo_b64}' class='header-img-render'>" if logo_b64 else "<div class='fallback-logo-render'>📝</div>"
 st.markdown(f"""
