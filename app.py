@@ -656,13 +656,24 @@ def render_control_room(df):
             elif "MLSS" in sel_cats[0] or "Hall Super" in sel_cats[0]:
                 dynamic_assignment_label = "Floor No"
 
-        headers = ["SL", "Name", "Designation", "Dept/Tech", dynamic_assignment_label, "Signature"]
+        # কলাম হেডার পরিবর্তন (HTML কোড বিন্যাস ট্রিকস অনুযায়ী)
+        headers = ["SL", "Name\n(Not in Order of Seniority)", "Designation", "Dept/Tech", dynamic_assignment_label, "Signature"]
+        
+        # ২ লাইনের টেক্সট সুন্দরভাবে দেখানোর জন্য হেডার রো-এর উচ্চতা বৃদ্ধি করা হলো
+        ws.row_dimensions[6].height = 35 
+
         for col_num, header_title in enumerate(headers, 1):
             cell = ws.cell(row=6, column=col_num)
             cell.value = header_title
-            cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # 'Name' হেডারটিকে সুনির্দিষ্টভাবে রেন্ডার, টেক্সট র‍্যাপ এবং মাঝখানে সারিবদ্ধ করা হচ্ছে
+            if col_num == 2:
+                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            else:
+                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
             
         # ৪. ডেটা পপুলেশন (Row 7 থেকে শুরু)
         thin_border = Border(
@@ -693,7 +704,7 @@ def render_control_room(df):
             
         # ৫. প্রাতিষ্ঠানিক সমাপ্তি / সিগনেচার এরিয়া (Row + 3)
         current_row += 3
-        ws.cell(row=current_row, column=6, value="Control Room Officer").font = Font(name="Calibri", size=11, bold=True)
+        ws.cell(row=current_row, column=6, value="Exam Control Room Officer").font = Font(name="Calibri", size=11, bold=True)
         ws.cell(row=current_row, column=6).alignment = Alignment(horizontal="center")
         ws.cell(row=current_row+1, column=6, value="Narsingdi GPI").font = Font(name="Calibri", size=10, italic=True)
         ws.cell(row=current_row+1, column=6).alignment = Alignment(horizontal="center")
@@ -718,7 +729,7 @@ def render_control_room(df):
         
         # 📥 রেডি-মেড লেআউট এক্সেল ডাউনলোড বাটন
         st.download_button(
-            label="📥 Download Ready-Made Official Roster (Excel)",
+            label="📥 Download Official Roster (Excel)",
             data=excel_data,
             file_name=custom_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -773,7 +784,7 @@ df_filtered_tech = df_filtered_role[df_filtered_role['Technology/Dept'] == selec
 with col3:
     selected_name = st.selectbox("৩. তালিকায় আপনার নাম নির্বাচন করুন:", sorted(df_filtered_tech['Name'].unique()), index=None, placeholder="— নির্বাচন করুন —", key="main_name")
 
-# ৭. ডেটা ফিল্টার ও ভিউ জেনারেশন
+# ७. ডেটা ফিল্টার ও ভিউ জেনারেশন
 if not (selected_role and selected_tech and selected_name):
     st.info("👆 আপনার ডিউটি রোস্টার দেখতে উপরের তিনটি অপশন (পদবি, টেকনোলজি/ডিপার্টমেন্ট ও নাম) নির্বাচন করুন।")
     st.stop()
@@ -795,7 +806,7 @@ df_mapped["Floor / Room Assignment"] = assigned_column_user
 user_schedule = df_mapped[df_mapped['Name'] == selected_name][['Date', 'Time Slot', 'Duty Status', 'Floor / Room Assignment']]
 user_info = df_mapped[df_mapped['Name'] == selected_name].iloc[0]
 
-# প্রোফাইল কার্ড প্রদর্শন
+# প্রোফাইলカード প্রদর্শন
 st.markdown(f"""
 <div class='profile-card'>
     <div class='profile-grid'>
