@@ -26,6 +26,9 @@ st.set_page_config(
 if "assignments" not in st.session_state:
     st.session_state["assignments"] = {}
 
+if "language" not in st.session_state:
+    st.session_state["language"] = "bn"
+
 if "custom_rooms" not in st.session_state:
     st.session_state["custom_rooms"] = [f"Room {i}" for i in range(101, 110)]  # ডিফল্ট ৯টি রুম
 
@@ -725,13 +728,26 @@ except Exception as e:
     st.stop()
 
 # ৫. পোর্টাল টপ ব্যানার রেন্ডারিং
+# Language selector buttons
+col1, col2, col3 = st.columns([3, 1, 1])
+with col2:
+    if st.button("🇬🇧 EN", use_container_width=True, key="btn_en"):
+        st.session_state["language"] = "en"
+        st.rerun()
+with col3:
+    if st.button("🇧🇩 BN", use_container_width=True, key="btn_bn"):
+        st.session_state["language"] = "bn"
+        st.rerun()
+
+st.divider()
+
 logo_element = f"<img src='{logo_b64}' class='header-img-render'>" if logo_b64 else "<div class='fallback-logo-render'>📝</div>"
 st.markdown(f"""
 <div class='portal-header-container'>
     {logo_element}
     <div class='header-text'>
-        <h1>নরসিংদী সরকারি পলিটেকনিক ইনস্টিটিউট</h1>
-        <p>পর্বমধ্য পরীক্ষা - ২০২৬ | ডিজিটাল ডিউটি রোস্টার পোর্টাল</p>
+        <h1>{"Narsingdi Government Polytechnic Institute" if st.session_state["language"] == "en" else "নরসিংদী সরকারি পলিটেকনিক ইনস্টিটিউট"}</h1>
+        <p>পর্বমধ্য পরীক্ষা - ২০২৬ | ডিজিটাল ডিউটি রোস্টার ম্যানেজমেন্ট পোর্টাল</p>
     </div>
 </div>
 """, unsafe_allow_html=True)
