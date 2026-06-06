@@ -26,9 +26,6 @@ st.set_page_config(
 if "assignments" not in st.session_state:
     st.session_state["assignments"] = {}
 
-if "language" not in st.session_state:
-    st.session_state["language"] = "bn"
-
 if "custom_rooms" not in st.session_state:
     st.session_state["custom_rooms"] = [f"Room {i}" for i in range(101, 110)]  # ডিফল্ট ৯টি রুম
 
@@ -727,24 +724,12 @@ except Exception as e:
     st.error(f"এক্সেল ফাইলটি লোড করা যাচ্ছে না। ত্রুটি: {e}")
     st.stop()
 
-# ৫. পোর্টাল টপ ব্যানার রেন্ডারিং
-# Language selector buttons - compact
-col_en, col_bn = st.columns(2, gap="small")
-with col_en:
-    if st.button("🇬🇧 EN", use_container_width=True, key="btn_en"):
-        st.session_state["language"] = "en"
-        st.rerun()
-with col_bn:
-    if st.button("🇧🇩 BN", use_container_width=True, key="btn_bn"):
-        st.session_state["language"] = "bn"
-        st.rerun()
-
-logo_element = f"<img src='{logo_b64}' class='header-img-render'>" if logo_b64 else "<div class='fallback-logo-render'>📝</div>"
+# ৫. পোর্টাল টপ ব্যানার রেন্ডারিংlogo_element = f"<img src='{logo_b64}' class='header-img-render'>" if logo_b64 else "<div class='fallback-logo-render'>📝</div>"
 st.markdown(f"""
 <div class='portal-header-container'>
     {logo_element}
     <div class='header-text'>
-        <h1>{"Narsingdi Government Polytechnic Institute" if st.session_state["language"] == "en" else "নরসিংদী সরকারি পলিটেকনিক ইনস্টিটিউট"}</h1>
+        <h1>নরসিংদী সরকারি পলিটেকনিক ইনস্টিটিউট</h1>
         <p>পর্বমধ্য পরীক্ষা - ২০২৬ | ডিজিটাল ডিউটি রোস্টার ম্যানেজমেন্ট পোর্টাল</p>
     </div>
 </div>
