@@ -6,6 +6,7 @@ import base64
 import io
 import hmac
 import random
+import zipfile  
 from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -26,12 +27,12 @@ st.set_page_config(
 if "assignments" not in st.session_state:
     st.session_state["assignments"] = {}
 
-# ব্যবহারকারীর চাহিদা অনুযায়ী নির্দিষ্ট রুম নম্বরসমূহ সেট করা হলো
+# ব্যবহারকারীর চাহিদা অনুযায়ী নির্দিষ্টルーム নম্বরসমূহ সেট করা হলো
 if "custom_rooms" not in st.session_state:
     st.session_state["custom_rooms"] = ["Room 112", "Room 115", "Room 213", "Room 214", "Room 215", "Room 311", "Room 312", "Room 313", "Room 411", "Room 412", "Room 413", "Room 414", "Room 501", "Room 505", "Room 506", "Room 507"]
 
 if "custom_floors" not in st.session_state:
-    st.session_state["custom_floors"] = ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor"]  # ডিফল্ট ৫টি ফ্লোর
+    st.session_state["custom_floors"] = ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor"]  
 
 # লোগো ফাইল অটো-চেক করার ফাংশন
 def get_logo_base64():
@@ -50,7 +51,7 @@ def get_logo_base64():
 
 logo_b64 = get_logo_base64()
 
-# ২. মডার্ন ইউজার ইন্টারফেস ডিজাইন (CSS) - line space optimized
+# ২. মডার্ন ইউজার ইন্টারফেস ডিজাইন (CSS)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght=400;500;600;700&family=Inter:wght=400;500;600;700&display=swap');
@@ -132,25 +133,40 @@ st.markdown("""
         line-height: 1.1 !important;
     }
 
+    /* ড্যাশবোর্ড হেডার টাইটেল টেক্সট */
+    .admin-panel-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #0F172A;
+        margin: 0;
+        line-height: 40px;
+    }
+
     div.stDownloadButton {
         text-align: center;
-        margin: 30px 0;
+        margin: 0px !important;
     }
     div.stDownloadButton > button {
         background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
         color: white !important;
-        padding: 14px 50px !important;
+        padding: 9px 20px !important;
         border: none !important;
         border-radius: 6px !important;
-        font-size: 16px !important;
+        font-size: 14px !important;
         font-weight: 600 !important;
         width: 100% !important;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2) !important;
         transition: all 0.2s ease !important;
     }
     div.stDownloadButton > button:hover {
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4) !important;
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
         transform: translateY(-1px) !important;
+    }
+    
+    /* লগআউট বাটন অপ্টিমাইজেশন */
+    div[data-testid="column"] button:not([data-testid="baseButton-secondary"]) {
+        padding: 9px 20px !important;
+        font-size: 14px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -217,7 +233,7 @@ def load_and_process_roster():
             
     return pd.DataFrame(parsed_records)
 
-# ৩.৫ আসল পিডিএফ জেনারেটর (ReportLab)
+# ৩.৫ পিডিএফ জেনারেটর (ReportLab)
 def generate_pdf(user_info, schedule_df):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -262,7 +278,7 @@ def generate_pdf(user_info, schedule_df):
 
     data = [["SL", "Date", "Time Slot", "Duty Status", "Floor/Room"]]
     for i, (_, row) in enumerate(schedule_df.iterrows(), start=1):
-        f_r = row.get("Floor / Room Assignment", "N/A")
+        f_r = row.get("Floor / Room Assignment", "Not Assigned Yet")
         data.append([str(i), str(row["Date"]), str(row["Time Slot"]), str(row["Duty Status"]), str(f_r)])
     table = Table(data, colWidths=[doc.width * w for w in (0.08, 0.22, 0.22, 0.24, 0.24)], repeatRows=1)
     table.setStyle(TableStyle([
@@ -278,15 +294,9 @@ def generate_pdf(user_info, schedule_df):
     ]))
     elements.append(table)
 
-    # --- কাস্টম সিগনেচার ব্লক ---
     sig_style = ParagraphStyle(
-        "SigBlock",
-        parent=styles["Normal"],
-        alignment=TA_RIGHT,
-        leading=16,
-        spaceBefore=70  
+        "SigBlock", parent=styles["Normal"], alignment=TA_RIGHT, leading=16, spaceBefore=70  
     )
-    
     sig_text = (
         "<b><font size=11>Exam Control Room Officer</font></b><br/>"
         "<font size=9 color='#475569'>Narsingdi Government Polytechnic Institute</font>"
@@ -325,55 +335,41 @@ def _check_admin_login():
     return False
 
 
-# ==========================================
-# 🛠️ নতুন রিফ্যাক্টরকৃত অ্যাসাইনমেন্ট ইঞ্জিন (১০০% কাভারেজ গ্যারান্টি)
-# ==========================================
 def run_random_assignment(df, active_rooms, active_floors):
-    """
-    গ্লোবাল রাউন্ড-রবিন পুল জেনারেশন মেকানিজম: 
-    নির্বাচিত প্রতিটি রুম ও ফ্লোরের ১০০% কাভারেজ গ্যারান্টি নিশ্চিত করে।
-    """
     new_assignments = {}
     grouped = df.groupby(['Date', 'Time Slot'])
     
-    # রুম ও ফ্লোর ডাটা প্রিপারেশন এবং ক্লিন-আপ (শুধু নম্বর এক্সট্র্যাকশন)
     clean_rooms = [r.split(" ")[1] if " " in str(r) else str(r) for r in active_rooms]
     clean_floors = [str(f) for f in active_floors]
     
-    # গ্লোবাল সার্কুলার কিউ (Circular Queue) এর জন্য হেল্পার জেনারেটর ফাংশন
     def create_shuffled_pool(items):
         pool = []
         while True:
             if not pool:
                 pool = list(items)
-                random.shuffle(pool)  # র্যান্ডমাইজেশন ও কাভারেজ গ্যারান্টি
+                random.shuffle(pool)  
             yield pool.pop(0)
 
     room_generator = create_shuffled_pool(clean_rooms)
     floor_hs_generator = create_shuffled_pool(clean_floors)
     floor_mlss_generator = create_shuffled_pool(clean_floors)
     
-    # ক্রমানুসারে প্রতিটি ডেট এবং টাইম স্লট প্রসেস করা
     for (date, slot), group in grouped:
         shift_key = f"{date}_{slot}"
         new_assignments[shift_key] = {}
         
-        # ১. Teacher / Invigilator -> ROOM অ্যাসাইনমেন্ট
         invigilators = group[group['Role'] == 'Teacher / Invigilator']['Name'].tolist()
         if invigilators and clean_rooms:
-            # একই শিফটের টিচারদের র্যান্ডম পজিশনে ডিস্ট্রিবিউট করা
             random.shuffle(invigilators)
             for inv in invigilators:
                 new_assignments[shift_key][inv] = next(room_generator)
 
-        # ২. Hall Super -> FLOOR অ্যাসাইনমেন্ট
         hall_supers = group[group['Role'] == 'Hall Super']['Name'].tolist()
         if hall_supers and clean_floors:
             random.shuffle(hall_supers)
             for hs in hall_supers:
                 new_assignments[shift_key][hs] = next(floor_hs_generator)
 
-        # ৩. MLSS / Staff -> FLOOR অ্যাসাইনমেন্ট
         mlss_staff = group[group['Role'] == 'MLSS / Staff']['Name'].tolist()
         if mlss_staff and clean_floors:
             random.shuffle(mlss_staff)
@@ -384,24 +380,75 @@ def run_random_assignment(df, active_rooms, active_floors):
     st.success("🎯 100% Floor & Room Coverage Guaranteed! Dynamic allocation successfully completed.")
 
 
-def render_control_room(df):
-    st.markdown("## 🛡️ Control Room Dashboard")
+# ==========================================
+# 📦 ক্যাটাগরি অনুযায়ী জিপ ফাইল তৈরির ইঞ্জিন 
+# ==========================================
+def generate_all_rosters_zip(full_df):
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        unique_names = full_df["Name"].unique()
+        
+        for name in unique_names:
+            person_df = full_df[full_df["Name"] == name].copy()
+            if person_df.empty:
+                continue
+                
+            user_info = person_df.iloc[0]
+            category = str(user_info["Role"]).replace("/", "-").replace(" ", "_") 
+            sanitized_name = str(name).replace(" ", "_").replace("/", "-")
+            
+            assigned_column_user = []
+            for _, row in person_df.iterrows():
+                s_key = f"{row['Date']}_{row['Time Slot']}"
+                p_name = row['Name']
+                assigned_val = st.session_state["assignments"].get(s_key, {}).get(p_name, "Not Assigned Yet")
+                if "Room:" in str(assigned_val):
+                    assigned_val = str(assigned_val).replace("Room:", "").strip()
+                assigned_column_user.append(assigned_val)
+                
+            person_df["Floor / Room Assignment"] = assigned_column_user
+            user_schedule = person_df[['Date', 'Time Slot', 'Duty Status', 'Floor / Room Assignment']].reset_index(drop=True)
+            user_schedule.index = user_schedule.index + 1
+            
+            pdf_data = generate_pdf(user_info, user_schedule)
+            zip_path = f"{category}/Duty_Roster_{sanitized_name}.pdf"
+            zip_file.writestr(zip_path, pdf_data)
+            
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
 
+
+def render_control_room(df):
     if not _check_admin_login():
         return
 
-    head = st.columns([3, 1])
-    head[0].success(f"Logged in as **{ADMIN_USER}**")
-    if head[1].button("🔓 Log out", use_container_width=True):
-        st.session_state["cr_authenticated"] = False
-        st.rerun()
+    # 🚀 പ്രഫেশনাল এবং মিনিমাল অ্যাকশন বার
+    head_cols = st.columns([3.2, 2, 0.8])
+    
+    with head_cols[0]:
+        st.markdown('<p class="admin-panel-title">🛡️ Control Room Dashboard</p>', unsafe_allow_html=True)
+        
+    with head_cols[1]:
+        try:
+            zip_data_bytes = generate_all_rosters_zip(df)
+            st.download_button(
+                label="📥 Bulk Download All PDFs (ZIP)",
+                data=zip_data_bytes,
+                file_name="All_Personnel_Organized_Rosters.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+        except Exception as zip_err:
+            st.error(f"ZIP Error: {zip_err}")
+            
+    with head_cols[2]:
+        if st.button("🔓 Log out", use_container_width=True):
+            st.session_state["cr_authenticated"] = False
+            st.rerun()
 
-    if ADMIN_PASSWORD == _DEFAULT_PASSWORD:
-        st.warning(
-            "Using the default password. Set the `CONTROL_ROOM_PASSWORD` "
-            "environment variable to secure this dashboard.",
-            icon="⚠️",
-        )
+    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    st.markdown("---")
 
     # ⚙️ Advanced Assignment Settings Panel
     with st.expander("⚙️ Advanced Floor & Room Assignment Matrix", expanded=True):
@@ -412,8 +459,6 @@ def render_control_room(df):
         # --- ১. রুম ম্যানেজমেন্ট (Teachers) ---
         with c_conf1:
             st.markdown("#### 🚪 Room Settings (For Teachers)")
-            
-            # নতুন রুম যোগ করা
             with st.container():
                 r_add_col1, r_add_col2 = st.columns([3, 1])
                 with r_add_col1:
@@ -428,7 +473,6 @@ def render_control_room(df):
                             st.session_state["custom_rooms"].sort()
                             st.rerun()
             
-            # রুমের নাম পরিবর্তন (Rename Section)
             if st.session_state["custom_rooms"]:
                 with st.container():
                     r_ren_col1, r_ren_col2, r_ren_col3 = st.columns([1.5, 2, 1])
@@ -441,13 +485,11 @@ def render_control_room(df):
                             r_new_clean = renamed_room.strip()
                             if r_new_clean.isdigit():
                                 r_new_clean = f"Room {r_new_clean}"
-                            
                             idx = st.session_state["custom_rooms"].index(target_room)
                             st.session_state["custom_rooms"][idx] = r_new_clean
                             st.session_state["custom_rooms"].sort()
                             st.rerun()
 
-            # রুম ডিলিট করার ডেডিকেটেড অপশন (Delete Section)
             if st.session_state["custom_rooms"]:
                 with st.container():
                     r_del_col1, r_del_col2 = st.columns([3.5, 1])
@@ -460,7 +502,6 @@ def render_control_room(df):
 
             st.markdown("**Active Rooms (Check to activate):**")
             selected_rooms = []
-            
             if st.session_state["custom_rooms"]:
                 room_list = list(st.session_state["custom_rooms"])
                 cols_per_row = 5
@@ -475,8 +516,6 @@ def render_control_room(df):
         # --- ২. ফ্লোর ম্যানেজমেন্ট (Hall Supers & MLSS) ---
         with c_conf2:
             st.markdown("#### 🏢 Floor Settings (For Hall Supers & MLSS)")
-            
-            # নতুন ফ্লোর যোগ করা
             with st.container():
                 f_add_col1, f_add_col2 = st.columns([3, 1])
                 with f_add_col1:
@@ -488,7 +527,6 @@ def render_control_room(df):
                             st.session_state["custom_floors"].append(f_clean)
                             st.rerun()
             
-            # ফ্লোরের নাম পরিবর্তন (Rename Section)
             if st.session_state["custom_floors"]:
                 with st.container():
                     f_ren_col1, f_ren_col2, f_ren_col3 = st.columns([1.5, 2, 1])
@@ -503,7 +541,6 @@ def render_control_room(df):
                             st.session_state["custom_floors"][idx] = f_new_clean
                             st.rerun()
 
-            # ফ্লোর ডিলিট করার ডেডিকেটেড অপশন (Delete Section)
             if st.session_state["custom_floors"]:
                 with st.container():
                     f_del_col1, f_del_col2 = st.columns([3.5, 1])
@@ -516,7 +553,6 @@ def render_control_room(df):
 
             st.markdown("**Active Floors (Check to activate):**")
             selected_floors = []
-            
             if st.session_state["custom_floors"]:
                 floor_list = list(st.session_state["custom_floors"])
                 cols_per_row = 5
@@ -535,6 +571,7 @@ def render_control_room(df):
             else:
                 run_random_assignment(df, selected_rooms, selected_floors)
 
+    st.markdown("---")
     st.markdown("Filter the duty roster below. **Leave a filter empty to include all values.**")
 
     f1, f2, f3, f4 = st.columns(4)
@@ -563,10 +600,8 @@ def render_control_room(df):
         s_key = f"{row['Date']}_{row['Time Slot']}"
         p_name = row['Name']
         assigned_val = st.session_state["assignments"].get(s_key, {}).get(p_name, "Not Assigned Yet")
-        
         if "Room:" in str(assigned_val):
             assigned_val = str(assigned_val).replace("Room:", "").strip()
-            
         assigned_column.append(assigned_val)
         
     filtered = filtered.copy()
@@ -612,7 +647,7 @@ def render_control_room(df):
         
         ws.merge_cells("A1:F1")
         ws["A1"] = "Narsingdi Government Polytechnic Institute"
-        ws["A1"].font = Font(name="Calibri", size=14, bold=True, color="1E3A8A")
+        ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="1E3A8A")
         ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
         
         ws.merge_cells("A2:F2")
@@ -628,7 +663,7 @@ def render_control_room(df):
         ws["D4"] = f"Date: {meta_date}"
         ws["F4"] = f"Time: {meta_slot}"
         for col in ["B", "D", "F"]:
-            ws[f"{col}4"].font = Font(name="Calibri", size=10, bold=True)
+            ws[f"{col}4"].font = Font(name="Calibri", size=11, bold=True)
             
         dynamic_assignment_label = "Floor / Room Assignment"
         if sel_cats and len(sel_cats) == 1:
@@ -637,13 +672,15 @@ def render_control_room(df):
             elif "MLSS" in sel_cats[0] or "Hall Super" in sel_cats[0]:
                 dynamic_assignment_label = "Floor No"
 
-        headers = ["SL", "Name", "Designation", "Dept/Tech", dynamic_assignment_label, "Signature"]
+        # 🎯 কলাম B-এর শিরোনামটি স্ক্রিনশট অনুযায়ী পরিবর্তন করা হলো
+        headers = ["SL", "Name\n(Not in Order of Seniority)", "Designation", "Dept/Tech", dynamic_assignment_label, "Signature"]
         for col_num, header_title in enumerate(headers, 1):
             cell = ws.cell(row=6, column=col_num)
             cell.value = header_title
-            cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+            cell.font = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+            # টেক্সট র‍্যাপ ট্রু করা হলো যাতে দুই লাইনের টাইটেল সুন্দরভাবে ফিট হয়
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             
         thin_border = Border(
             left=Side(style='thin', color='CBD5E1'),
@@ -675,10 +712,13 @@ def render_control_room(df):
         ws.cell(row=current_row+1, column=6, value="Narsingdi GPI").font = Font(name="Calibri", size=10, italic=True)
         ws.cell(row=current_row+1, column=6).alignment = Alignment(horizontal="center")
         
+        # কলামের প্রস্থ অটো-অ্যাডজাস্টমেন্ট
+        ws.row_dimensions[6].height = 28 # হেডার লাইনের উচ্চতা বাড়ানো হলো যেন টেক্সটটি পরিষ্কার দেখা যায়
         for col in ws.columns:
             max_len = max(len(str(cell.value or '')) for cell in col)
             col_letter = openpyxl.utils.get_column_letter(col[0].column)
             ws.column_dimensions[col_letter].width = max(max_len + 3, 13)
+        ws.column_dimensions['B'].width = 32 # নাম কলামের জন্য নির্দিষ্ট নিরাপদ উইডথ সেট করা হলো
         ws.column_dimensions['F'].width = 16 
             
         buffer_excel = io.BytesIO()
@@ -757,10 +797,8 @@ for _, row in df_mapped.iterrows():
     s_key = f"{row['Date']}_{row['Time Slot']}"
     p_name = row['Name']
     assigned_val = st.session_state["assignments"].get(s_key, {}).get(p_name, "Not Assigned Yet")
-    
     if "Room:" in str(assigned_val):
         assigned_val = str(assigned_val).replace("Room:", "").strip()
-        
     assigned_column_user.append(assigned_val)
 df_mapped["Floor / Room Assignment"] = assigned_column_user
 
@@ -787,7 +825,7 @@ if not user_schedule.empty:
     
     st.dataframe(user_schedule, use_container_width=True)
     
-    # ৮. পিডিএফ জেনারেশন ও ডাউনলোড বাটন
+    # পিডিএফ ডাউনলোড বাটন
     pdf_bytes = generate_pdf(user_info, user_schedule)
     pdf_filename = f"Duty_Roster_{str(user_info['Name']).replace(' ', '_')}.pdf"
 
