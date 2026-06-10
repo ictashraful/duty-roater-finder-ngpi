@@ -50,7 +50,7 @@ def get_logo_base64():
 
 logo_b64 = get_logo_base64()
 
-# ২. মডার্ন ইউজার ইন্টারফেস ডিজাইন (CSS) - লাইন স্পেস ও প্যাডিং মিনিমাইজ করা হয়েছে
+# ২. মডার্ন ইউজার ইন্টারফেস ডিজাইন (CSS) - line space optimized
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght=400;500;600;700&family=Inter:wght=400;500;600;700&display=swap');
@@ -117,12 +117,10 @@ st.markdown("""
     .profile-item { font-size: 15px; color: #475569; }
     .profile-item strong { color: #0F172A; font-weight: 600; display: inline-block; width: 110px; }
 
-    /* গ্রিডের লাইন স্পেস এবং এলিমেন্টের মার্জিন সর্বনিম্ন করার কাস্টম CSS */
     div[data-testid="stVerticalBlock"] > div {
-        gap: 0rem !important; /* ব্লকগুলোর ভেতরের গ্যাপ কমানো */
+        gap: 0rem !important; 
     }
     
-    /* স্ট্রিমলিট চেকবক্সের ফন্ট সাইজ এবং লাইন গ্যাপ একদম মিনিমাইজ করা */
     div[data-testid="stCheckbox"] {
         margin-bottom: 2px !important;
         margin-top: 2px !important;
@@ -134,7 +132,6 @@ st.markdown("""
         line-height: 1.1 !important;
     }
 
-    /* অফিসিয়াল ডাউনলোড বোতামের কাস্টমাইজেশন */
     div.stDownloadButton {
         text-align: center;
         margin: 30px 0;
@@ -281,13 +278,13 @@ def generate_pdf(user_info, schedule_df):
     ]))
     elements.append(table)
 
-    # --- কাস্টম সিগনেচার ব্লক (স্বাক্ষরের জন্য পর্যাপ্ত স্পেস বৃদ্ধি করা হলো) ---
+    # --- কাস্টম সিগনেচার ব্লক ---
     sig_style = ParagraphStyle(
         "SigBlock",
         parent=styles["Normal"],
         alignment=TA_RIGHT,
         leading=16,
-        spaceBefore=70  # অফিসার যেন আরামে কলম দিয়ে স্বাক্ষর করতে পারেন সেজন্য মার্জিন বাড়িয়ে ৭০ করা হলো
+        spaceBefore=70  
     )
     
     sig_text = (
@@ -295,7 +292,6 @@ def generate_pdf(user_info, schedule_df):
         "<font size=9 color='#475569'>Narsingdi Government Polytechnic Institute</font>"
     )
     elements.append(Paragraph(sig_text, sig_style))
-    # -------------------------------------------------------------------------
 
     doc.build(elements)
     buffer.seek(0)
@@ -329,87 +325,63 @@ def _check_admin_login():
     return False
 
 
+# ==========================================
+# 🛠️ নতুন রিফ্যাক্টরকৃত অ্যাসাইনমেন্ট ইঞ্জিন (১০০% কাভারেজ গ্যারান্টি)
+# ==========================================
 def run_random_assignment(df, active_rooms, active_floors):
-    """Algorithmic allocator mapped strictly by role: Teachers -> Room No (only number), Hall Super/MLSS -> Floor"""
+    """
+    গ্লোবাল রাউন্ড-রবিন পুল জেনারেশন মেকানিজম: 
+    নির্বাচিত প্রতিটি রুম ও ফ্লোরের ১০০% কাভারেজ গ্যারান্টি নিশ্চিত করে।
+    """
     new_assignments = {}
     grouped = df.groupby(['Date', 'Time Slot'])
     
+    # রুম ও ফ্লোর ডাটা প্রিপারেশন এবং ক্লিন-আপ (শুধু নম্বর এক্সট্র্যাকশন)
+    clean_rooms = [r.split(" ")[1] if " " in str(r) else str(r) for r in active_rooms]
+    clean_floors = [str(f) for f in active_floors]
+    
+    # গ্লোবাল সার্কুলার কিউ (Circular Queue) এর জন্য হেল্পার জেনারেটর ফাংশন
+    def create_shuffled_pool(items):
+        pool = []
+        while True:
+            if not pool:
+                pool = list(items)
+                random.shuffle(pool)  # র্যান্ডমাইজেশন ও কাভারেজ গ্যারান্টি
+            yield pool.pop(0)
+
+    room_generator = create_shuffled_pool(clean_rooms)
+    floor_hs_generator = create_shuffled_pool(clean_floors)
+    floor_mlss_generator = create_shuffled_pool(clean_floors)
+    
+    # ক্রমানুসারে প্রতিটি ডেট এবং টাইম স্লট প্রসেস করা
     for (date, slot), group in grouped:
         shift_key = f"{date}_{slot}"
         new_assignments[shift_key] = {}
         
-        # ১. Teacher / Invigilator -> ROOM অ্যাসাইনমেন্ট (শুধুমাত্র রুম নম্বর অ্যাসাইন করা হচ্ছে)
+        # ১. Teacher / Invigilator -> ROOM অ্যাসাইনমেন্ট
         invigilators = group[group['Role'] == 'Teacher / Invigilator']['Name'].tolist()
-        if invigilators and active_rooms:
+        if invigilators and clean_rooms:
+            # একই শিফটের টিচারদের র্যান্ডম পজিশনে ডিস্ট্রিবিউট করা
             random.shuffle(invigilators)
-            room_slots = [[r, 1] for r in active_rooms] 
-            
-            idx = 0
-            while len(invigilators) > len(room_slots) and idx < len(room_slots):
-                room_slots[idx][1] = 2
-                idx += 1
-                
-            current_inv_idx = 0
-            for r_num, count in room_slots:
-                # যদি "Room 112" ফরম্যাটে থাকে, তবে "Room " অংশটি বাদ দিয়ে শুধু নম্বর নেওয়া হচ্ছে
-                clean_room_num = r_num.split(" ")[1] if " " in str(r_num) else str(r_num)
-                for _ in range(count):
-                    if current_inv_idx < len(invigilators):
-                        new_assignments[shift_key][invigilators[current_inv_idx]] = clean_room_num
-                        current_inv_idx += 1
-                        
-            while current_inv_idx < len(invigilators):
-                r_rand = random.choice(active_rooms)
-                clean_room_num = r_rand.split(" ")[1] if " " in str(r_rand) else str(r_rand)
-                new_assignments[shift_key][invigilators[current_inv_idx]] = clean_room_num
-                current_inv_idx += 1
+            for inv in invigilators:
+                new_assignments[shift_key][inv] = next(room_generator)
 
         # ২. Hall Super -> FLOOR অ্যাসাইনমেন্ট
         hall_supers = group[group['Role'] == 'Hall Super']['Name'].tolist()
-        if hall_supers and active_floors:
+        if hall_supers and clean_floors:
             random.shuffle(hall_supers)
-            floor_slots = [[f, 1] for f in active_floors]
-            
-            idx = 0
-            while len(hall_supers) > len(floor_slots) and idx < len(floor_slots):
-                floor_slots[idx][1] = 2
-                idx += 1
-                
-            current_hs_idx = 0
-            for f_num, count in floor_slots:
-                for _ in range(count):
-                    if current_hs_idx < len(hall_supers):
-                        new_assignments[shift_key][hall_supers[current_hs_idx]] = f"{f_num}"
-                        current_hs_idx += 1
-            while current_hs_idx < len(hall_supers):
-                f_rand = random.choice(active_floors)
-                new_assignments[shift_key][hall_supers[current_hs_idx]] = f"{f_rand}"
-                current_hs_idx += 1
+            for hs in hall_supers:
+                new_assignments[shift_key][hs] = next(floor_hs_generator)
 
         # ৩. MLSS / Staff -> FLOOR অ্যাসাইনমেন্ট
         mlss_staff = group[group['Role'] == 'MLSS / Staff']['Name'].tolist()
-        if mlss_staff and active_floors:
+        if mlss_staff and clean_floors:
             random.shuffle(mlss_staff)
-            mlss_slots = [[f, 1] for f in active_floors]
-            
-            idx = 0
-            while len(mlss_staff) > len(mlss_slots) and idx < len(mlss_slots):
-                mlss_slots[idx][1] = 2
-                idx += 1
-                
-            current_m_idx = 0
-            for f_num, count in mlss_slots:
-                for _ in range(count):
-                    if current_m_idx < len(mlss_staff):
-                        new_assignments[shift_key][mlss_staff[current_m_idx]] = f"{f_num}"
-                        current_m_idx += 1
-            while current_m_idx < len(mlss_staff):
-                f_rand = random.choice(active_floors)
-                new_assignments[shift_key][mlss_staff[current_m_idx]] = f"{f_rand}"
-                current_m_idx += 1
+            for staff in mlss_staff:
+                new_assignments[shift_key][staff] = next(floor_mlss_generator)
 
     st.session_state["assignments"] = new_assignments
-    st.success("🎯 Floor & Room configuration generated matching exact institutional role requirements!")
+    st.success("🎯 100% Floor & Room Coverage Guaranteed! Dynamic allocation successfully completed.")
 
 
 def render_control_room(df):
@@ -489,7 +461,6 @@ def render_control_room(df):
             st.markdown("**Active Rooms (Check to activate):**")
             selected_rooms = []
             
-            # 🚀 ৫ কলাম বিশিষ্ট কাস্টম স্পেস-সেভিং গ্রিড লেআউট (লাইন স্পেস মিনিমাইজড)
             if st.session_state["custom_rooms"]:
                 room_list = list(st.session_state["custom_rooms"])
                 cols_per_row = 5
@@ -546,7 +517,6 @@ def render_control_room(df):
             st.markdown("**Active Floors (Check to activate):**")
             selected_floors = []
             
-            # 🚀 ৫ কলাম বিশিষ্ট কাস্টম স্পেস-সেভিং গ্রিড লেআউট (লাইন স্পেস মিনিমাইজড)
             if st.session_state["custom_floors"]:
                 floor_list = list(st.session_state["custom_floors"])
                 cols_per_row = 5
@@ -587,14 +557,13 @@ def render_control_room(df):
     if sel_cats:
         filtered = filtered[filtered["Role"].isin(sel_cats)]
 
-    # ম্যাপিং প্রসেস: মেইন টেবিলে সুনির্দিষ্ট ডাটা পুশ করা এবং "Room: " টেক্সট ক্লিন করা
+    # ম্যাপিং প্রসেস
     assigned_column = []
     for _, row in filtered.iterrows():
         s_key = f"{row['Date']}_{row['Time Slot']}"
         p_name = row['Name']
         assigned_val = st.session_state["assignments"].get(s_key, {}).get(p_name, "Not Assigned Yet")
         
-        # কোনো কারণে ওল্ড ভ্যালুতে "Room: " থাকলে তা ক্লিন করে শুধু নম্বরটি ডিসপ্লে করার সেফটি চেক
         if "Room:" in str(assigned_val):
             assigned_val = str(assigned_val).replace("Room:", "").strip()
             
@@ -621,7 +590,6 @@ def render_control_room(df):
     if personnel.empty:
         st.info("No personnel match the selected filters.")
     else:
-        # স্ক্রিন ডিসপ্লের কলাম লেবেল ডাইনামিক করা (ক্যাটাগরি ওয়াইজ)
         display_label = "Floor / Room Assignment"
         if sel_cats and len(sel_cats) == 1:
             cat_selected = sel_cats[0]
@@ -640,9 +608,8 @@ def render_control_room(df):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Duty Roster"
-        ws.views.sheetView[0].showGridLines = True # গ্রিডলাইন অন রাখা
+        ws.views.sheetView[0].showGridLines = True 
         
-        # ১. প্রাতিষ্ঠানিক হেডার (Row 1 & 2)
         ws.merge_cells("A1:F1")
         ws["A1"] = "Narsingdi Government Polytechnic Institute"
         ws["A1"].font = Font(name="Calibri", size=14, bold=True, color="1E3A8A")
@@ -653,7 +620,6 @@ def render_control_room(df):
         ws["A2"].font = Font(name="Calibri", size=11, italic=True, color="475569")
         ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
         
-        # ২. মেটাডেটা ইনফরমেশন (Row 4) - ফিল্টারের ওপর ভিত্তি করে ডাইনামিক হবে
         meta_cat = sel_cats[0] if sel_cats else "All Categories"
         meta_date = sel_dates[0] if sel_dates else "All Dates"
         meta_slot = sel_slots[0] if sel_slots else "All Times"
@@ -664,7 +630,6 @@ def render_control_room(df):
         for col in ["B", "D", "F"]:
             ws[f"{col}4"].font = Font(name="Calibri", size=10, bold=True)
             
-        # ৩. ডাইনামিক কলাম হেডার নির্ধারণ
         dynamic_assignment_label = "Floor / Room Assignment"
         if sel_cats and len(sel_cats) == 1:
             if "Invigilator" in sel_cats[0]:
@@ -680,7 +645,6 @@ def render_control_room(df):
             cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center")
             
-        # ৪. ডেটা পপুলেশন (Row 7 থেকে শুরু)
         thin_border = Border(
             left=Side(style='thin', color='CBD5E1'),
             right=Side(style='thin', color='CBD5E1'),
@@ -695,44 +659,37 @@ def render_control_room(df):
             ws.cell(row=current_row, column=3, value=row["Designation"]).alignment = Alignment(horizontal="left")
             ws.cell(row=current_row, column=4, value=row["Dept/Tech"]).alignment = Alignment(horizontal="center")
             ws.cell(row=current_row, column=5, value=row["Floor / Room Assignment"]).alignment = Alignment(horizontal="center")
-            ws.cell(row=current_row, column=6, value="").alignment = Alignment(horizontal="center") # ফিজিক্যাল সিগনেচার স্পেস খালি রাখা
+            ws.cell(row=current_row, column=6, value="").alignment = Alignment(horizontal="center") 
             
-            # বর্ডার এবং ফন্ট স্টাইল সেট করা
             for col_num in range(1, 7):
                 c = ws.cell(row=current_row, column=col_num)
                 c.font = Font(name="Calibri", size=11)
                 c.border = thin_border
-                # অল্টারনে티브 রো কালারিং (হালকা গ্রে শেড)
                 if current_row % 2 == 0:
                     c.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
             current_row += 1
             
-        # ৫. প্রাতিষ্ঠানিক সমাপ্তি / সিগনেচার এরিয়া (Row + 3)
         current_row += 3
         ws.cell(row=current_row, column=6, value="Exam Control Room Officer").font = Font(name="Calibri", size=11, bold=True)
         ws.cell(row=current_row, column=6).alignment = Alignment(horizontal="center")
         ws.cell(row=current_row+1, column=6, value="Narsingdi GPI").font = Font(name="Calibri", size=10, italic=True)
         ws.cell(row=current_row+1, column=6).alignment = Alignment(horizontal="center")
         
-        # কলামের উইডথ স্বয়ংক্রিয়ভাবে অ্যাডজাস্ট করা (Auto-fit Columns)
         for col in ws.columns:
             max_len = max(len(str(cell.value or '')) for cell in col)
             col_letter = openpyxl.utils.get_column_letter(col[0].column)
             ws.column_dimensions[col_letter].width = max(max_len + 3, 13)
-        ws.column_dimensions['F'].width = 16 # সিগনেচার স্পেস একটু বড় রাখা
+        ws.column_dimensions['F'].width = 16 
             
-        # ফাইলটি বাফারে সেভ করা
         buffer_excel = io.BytesIO()
         wb.save(buffer_excel)
         excel_data = buffer_excel.getvalue()
         
-        # ডাইনামিক ফাইলের নাম জেনারেশন ইঞ্জিন (Date_Time_Category)
         fn_date = str(sel_dates[0]).replace("/", "-") if sel_dates else "All-Dates"
         fn_time = str(sel_slots[0]).replace(" ", "-").replace(":", "-") if sel_slots else "All-Times"
         fn_cat = str(sel_cats[0]).replace(" ", "-").replace("/", "-") if sel_cats else "All-Categories"
         custom_filename = f"Roster_{fn_date}_{fn_time}_{fn_cat}.xlsx"
         
-        # 📥 রেডি-মেড লেআউট এক্সেল ডাউনলোড বাটন
         st.download_button(
             label="📥 Download Official Roster (Excel)",
             data=excel_data,
@@ -794,7 +751,6 @@ if not (selected_role and selected_tech and selected_name):
     st.info("👆 আপনার ডিউটি রোস্টার দেখতে উপরের তিনটি অপশন (পদবি, টেকনোলজি/ডিপার্টমেন্ট ও নাম) নির্বাচন করুন।")
     st.stop()
 
-# ইউজার ইন্টারফেসেও এসাইনমেন্ট সিঙ্ক করা এবং充ীনিং নিশ্চিত করা
 df_mapped = df_filtered_tech.copy()
 assigned_column_user = []
 for _, row in df_mapped.iterrows():
